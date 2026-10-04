@@ -11,7 +11,7 @@
 #include "board.h"
 #include "gpio.h"
 #include "pisr.h"
-#include "serial_out.h"
+#include "uart.h"
 
 
 /*******************************************************************************
@@ -52,7 +52,9 @@ void switchCallback (void);
 /* Función que se llama 1 vez, al comienzo del programa */
 void App_Init (void)
 {
-	serial_out_INIT();
+	UART_config_t c ;
+	c.UART_num = 1;
+	UART_init(c);
 }
 
 /* Función que se llama constantemente en un ciclo infinito */
