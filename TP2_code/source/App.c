@@ -53,16 +53,31 @@ void switchCallback (void);
 void App_Init (void)
 {
 	UART_config_t c ;
-	c.UART_num = 1;
+	c.UART_num = 0;
+	c.baudrate = 115200;
+	c.data_length = EIGTH_BIT_DATA;
+	c.first_bit = LSB_FIRST;
+	c.mode = RECEIVE_AND_TRANSMIT;
+	c.parity = NO_PARITY;
+	c.stop_length = ONE_BIT_STOP;
+	c.transmit_blocking = NON_BLOCKING;
+	c.receive_blocking = NON_BLOCKING;
+	c.use_hw_fifo = false;
 	UART_init(c);
+
+	uint8_t hola[4] = {'h', 'o', 'l','a'};
+	UART_write(UART_0, hola, 4);
 }
 
 /* Función que se llama constantemente en un ciclo infinito */
 void App_Run (void)
 {
-
-
-
+	if(UART_words_received(UART_0) >= 1)
+	{
+		uint8_t received;
+		UART_read(UART_0, &received, 1);
+		UART_write(UART_0, &received, 1);
+	}
 }
 
 

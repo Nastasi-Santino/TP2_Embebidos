@@ -121,8 +121,8 @@ static void clock_PIN_Enable(uint8_t UART_num)
 	{
 	case 0:
 		SIM->SCGC4 |= SIM_SCGC4_UART0_MASK;
-		set_PIN_alt3(PORTA, 14);
-		set_PIN_alt3(PORTA, 15);
+		set_PIN_alt3(PORTB, 16);
+		set_PIN_alt3(PORTB, 17);
 		break;
 	case 1:
 		SIM->SCGC4 |= SIM_SCGC4_UART1_MASK;
@@ -184,7 +184,7 @@ static void circular_buffer_increase(uint8_t * num)
 	}
 }
 
-bool UART_write(uint8_t UART_num, uint16_t * words, uint8_t length)
+bool UART_write(uint8_t UART_num, uint8_t * words, uint8_t length)
 {
 	if(!UART_yainit[UART_num])
 	{
@@ -214,14 +214,9 @@ bool UART_write(uint8_t UART_num, uint16_t * words, uint8_t length)
 }
 
 
-bool UART_read(uint8_t UART_num, uint16_t * words, uint8_t length)
+bool UART_read(uint8_t UART_num, uint8_t * words, uint8_t length)
 {
 	if(!UART_yainit[UART_num])
-	{
-		return false;
-	}
-
-	if(length > (RX_buffers[UART_num].load - RX_buffers[UART_num].read))
 	{
 		return false;
 	}
@@ -237,9 +232,14 @@ bool UART_read(uint8_t UART_num, uint16_t * words, uint8_t length)
 		}
 	} else
 	{
+		if(length > UART_words_received(UART_num))
+		{
+			return false;
+		}
+
 		for(int i = 0; i < length; i++)
 		{
-			words[i] = RX_buffers[UART_num].read;
+			words[i] = RX_buffers[UART_num].buffer[RX_buffers[UART_num].read];
 			circular_buffer_increase(&RX_buffers[UART_num].read);
 		}
 	}
@@ -247,13 +247,24 @@ bool UART_read(uint8_t UART_num, uint16_t * words, uint8_t length)
 	return true;
 }
 
+uint8_t UART_words_received(uint8_t UART_num)
+{
+	if(RX_buffers[UART_num].load >= RX_buffers[UART_num].read)
+	{
+		return (RX_buffers[UART_num].load - RX_buffers[UART_num].read);
+	} else
+	{
+		return TX_SW_BUFFER_LENGTH + RX_buffers[UART_num].load - RX_buffers[UART_num].read;
+	}
+
+}
 
 static void TX_RX_handler(uint8_t UART_num)
 {
 	UART_Type * uart = uarts[UART_num];
 	uint8_t tmp = uart->S1;
 
-	if(tmp & UART_S1_TDRE_MASK)
+	if(uart->C2 & UART_C2_TIE_MASK && tmp & UART_S1_TDRE_MASK)
 	{
 		uart->D = TX_buffers[UART_num].buffer[TX_buffers[UART_num].read];
 		circular_buffer_increase(&TX_buffers[UART_num].read);

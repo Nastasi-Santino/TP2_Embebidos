@@ -72,8 +72,8 @@ typedef struct{
 
 bool UART_init(UART_config_t config);
 
-bool UART_write(uint8_t UART_num, uint16_t * words, uint8_t length);
-bool UART_read(uint8_t UART_num, uint16_t * words, uint8_t length);
+bool UART_write(uint8_t UART_num, uint8_t * words, uint8_t length);
+bool UART_read(uint8_t UART_num, uint8_t * words, uint8_t length);
 
 uint8_t UART_words_received(uint8_t UART_num);
 bool UART_tx_busy(uint8_t UART_num);
