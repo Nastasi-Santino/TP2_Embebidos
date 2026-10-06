@@ -55,14 +55,14 @@ void App_Init (void)
 	UART_config_t c ;
 	c.UART_num = 0;
 	c.baudrate = 115200;
-	c.data_length = EIGTH_BIT_DATA;
+	c.data_length = EIGHT_BIT_DATA;
 	c.first_bit = LSB_FIRST;
 	c.mode = RECEIVE_AND_TRANSMIT;
 	c.parity = NO_PARITY;
 	c.stop_length = ONE_BIT_STOP;
 	c.transmit_blocking = NON_BLOCKING;
 	c.receive_blocking = NON_BLOCKING;
-	c.use_hw_fifo = false;
+	c.use_hw_fifo = true;
 	UART_init(c);
 
 	uint8_t hola[4] = {'h', 'o', 'l','a'};

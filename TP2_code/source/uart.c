@@ -4,6 +4,10 @@
 #define UART_HAL_DEFAULT_BAUDRATE 9600
 #define TX_SW_BUFFER_LENGTH 100
 
+#define FIFO_TX_DEPTH 8
+#define FIFO_TX_WATERMARK  3
+#define FIFO_RX_WATERMARK	5
+
 static UART_Type * const uarts[] = UART_BASE_PTRS;
 
 static uint8_t uarts_RX_TX_IRQn[] = UART_RX_TX_IRQS;
@@ -21,14 +25,14 @@ typedef struct{
 	uint8_t load;
 }circular_buffer;
 
-static circular_buffer TX_buffers[6];
-static circular_buffer RX_buffers[6];
+static volatile circular_buffer TX_buffers[6];
+static volatile circular_buffer RX_buffers[6];
 
 
 static void clock_PIN_Enable(uint8_t UART_num);
 static void set_PIN_alt3(PORT_Type * port, uint8_t pin);
 static void UART_setBaudrate(UART_Type * uart, uint32_t baudrate);
-static void circular_buffer_increase(uint8_t * num);
+static void circular_buffer_increase(volatile uint8_t * num);
 
 bool UART_init(UART_config_t config)
 {
@@ -85,6 +89,19 @@ bool UART_init(UART_config_t config)
 		}
 	}
 
+
+	if(config.use_hw_fifo)
+	{
+		usingFIFO[config.UART_num] = true;
+		uart->PFIFO |= UART_PFIFO_TXFE_MASK;
+		uart->PFIFO |= UART_PFIFO_RXFE_MASK;
+		uart->CFIFO = UART_CFIFO_RXFLUSH_MASK | UART_CFIFO_TXFLUSH_MASK;
+		uart->RWFIFO = FIFO_RX_WATERMARK;
+		uart->TWFIFO = FIFO_TX_WATERMARK;
+		uart->C2 |= UART_C2_ILIE_MASK;
+	}
+
+
 	switch(config.mode)
 	{
 	case RECEIVE:
@@ -105,11 +122,6 @@ bool UART_init(UART_config_t config)
 	if(config.first_bit == MSB_FIRST)
 	{
 		uart->S2 |= UART_S2_MSBF_MASK;
-	}
-
-	if(config.use_hw_fifo)
-	{
-		usingFIFO[config.UART_num] = true;
 	}
 
 	return true;
@@ -175,7 +187,7 @@ static void UART_setBaudrate(UART_Type * uart, uint32_t baudrate)
 	uart->C4 = (uart->C4 & ~UART_C4_BRFA_MASK) | UART_C4_BRFA(brfa);
 }
 
-static void circular_buffer_increase(uint8_t * num)
+static void circular_buffer_increase(volatile uint8_t * num)
 {
 	(*num)++;
 	if(*num >= TX_SW_BUFFER_LENGTH)
@@ -263,11 +275,37 @@ static void TX_RX_handler(uint8_t UART_num)
 {
 	UART_Type * uart = uarts[UART_num];
 	uint8_t tmp = uart->S1;
+	bool idle = tmp & UART_S1_IDLE_MASK;
 
 	if(uart->C2 & UART_C2_TIE_MASK && tmp & UART_S1_TDRE_MASK)
 	{
-		uart->D = TX_buffers[UART_num].buffer[TX_buffers[UART_num].read];
-		circular_buffer_increase(&TX_buffers[UART_num].read);
+		if(usingFIFO[UART_num])
+		{
+			uint8_t to_load;
+			if(((TX_buffers[UART_num].load >= TX_buffers[UART_num].read) ?
+					(TX_buffers[UART_num].load - TX_buffers[UART_num].read) :
+					(TX_SW_BUFFER_LENGTH + TX_buffers[UART_num].load - TX_buffers[UART_num].read))
+					>= FIFO_TX_DEPTH - FIFO_TX_WATERMARK)
+			{
+				to_load = FIFO_TX_DEPTH - uart->TCFIFO;
+			} else
+			{
+				to_load = ((TX_buffers[UART_num].load >= TX_buffers[UART_num].read) ?
+						(TX_buffers[UART_num].load - TX_buffers[UART_num].read) :
+						(TX_SW_BUFFER_LENGTH + TX_buffers[UART_num].load - TX_buffers[UART_num].read));
+			}
+
+			for(int i = 0; i < to_load; i++)
+			{
+				uart->D = TX_buffers[UART_num].buffer[TX_buffers[UART_num].read];
+				circular_buffer_increase(&TX_buffers[UART_num].read);
+			}
+		} else
+		{
+			uart->D = TX_buffers[UART_num].buffer[TX_buffers[UART_num].read];
+			circular_buffer_increase(&TX_buffers[UART_num].read);
+		}
+
 
 		if(TX_buffers[UART_num].read == TX_buffers[UART_num].load)
 		{
@@ -277,8 +315,31 @@ static void TX_RX_handler(uint8_t UART_num)
 
 	if(tmp & UART_S1_RDRF_MASK)
 	{
-		RX_buffers[UART_num].buffer[RX_buffers[UART_num].load] = uart->D;
-		circular_buffer_increase(&RX_buffers[UART_num].load);
+		if(usingFIFO[UART_num])
+		{
+			uint8_t RX_count = uart->RCFIFO;
+			for(int i = 0; i < RX_count - 1; i++)
+			{
+				RX_buffers[UART_num].buffer[RX_buffers[UART_num].load] = uart->D;
+				circular_buffer_increase(&RX_buffers[UART_num].load);
+				tmp = uart->S1;
+			}
+		} else
+		{
+			RX_buffers[UART_num].buffer[RX_buffers[UART_num].load] = uart->D;
+			circular_buffer_increase(&RX_buffers[UART_num].load);
+		}
+	}
+
+	if(idle)
+	{
+		uint8_t RX_count = uart->RCFIFO;
+		for(int i = 0; i < RX_count; i++)
+		{
+			RX_buffers[UART_num].buffer[RX_buffers[UART_num].load] = uart->D;
+			circular_buffer_increase(&RX_buffers[UART_num].load);
+			tmp = uart->S1;
+		}
 	}
 }
 

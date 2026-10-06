@@ -28,7 +28,7 @@ enum{
 };
 
 enum{
-	EIGTH_BIT_DATA,
+	EIGHT_BIT_DATA,
 	NINE_BIT_DATA
 };
 
