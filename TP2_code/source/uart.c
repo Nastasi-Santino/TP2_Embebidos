@@ -33,6 +33,7 @@ static void clock_PIN_Enable(uint8_t UART_num);
 static void set_PIN_alt3(PORT_Type * port, uint8_t pin);
 static void UART_setBaudrate(UART_Type * uart, uint32_t baudrate);
 static void circular_buffer_increase(volatile uint8_t * num);
+static void TX_RX_handler(uint8_t UART_num);
 
 bool UART_init(UART_config_t config)
 {
@@ -271,6 +272,11 @@ uint8_t UART_words_received(uint8_t UART_num)
 
 }
 
+bool UART_tx_busy(uint8_t UART_num)
+{
+	return uarts[UART_num]->C2 & UART_C2_TIE_MASK;
+}
+
 static void TX_RX_handler(uint8_t UART_num)
 {
 	UART_Type * uart = uarts[UART_num];
@@ -285,7 +291,7 @@ static void TX_RX_handler(uint8_t UART_num)
 			if(((TX_buffers[UART_num].load >= TX_buffers[UART_num].read) ?
 					(TX_buffers[UART_num].load - TX_buffers[UART_num].read) :
 					(TX_SW_BUFFER_LENGTH + TX_buffers[UART_num].load - TX_buffers[UART_num].read))
-					>= FIFO_TX_DEPTH - FIFO_TX_WATERMARK)
+					>= FIFO_TX_DEPTH - uart->TCFIFO)
 			{
 				to_load = FIFO_TX_DEPTH - uart->TCFIFO;
 			} else
