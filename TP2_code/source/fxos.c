@@ -1,6 +1,7 @@
 #include "fxos.h"
 #include "gpio.h"
 #include "i2c.h"
+#include "hardware.h"
 #include <math.h>
 
 #define I2C_BAUDRATE 			  (uint32_t)100000
@@ -45,15 +46,18 @@ typedef struct {
 static volatile FXOS_raw_t current_sample;
 static volatile uint8_t raw_data_buffer[12];
 static volatile bool read_pending;
+static uint8_t raw_data_address = FXOS8700CQ_OUT_X_MSB;
 
 static void dataReady_IRQ(void);
 
 bool FXOS_INIT(void)
 {
-	I2C_config_t i2c_conf = {I2C_0, I2C_BAUDRATE, NON_BLOCKING};
+	hw_EnableInterrupts();
+	static I2C_config_t i2c_conf = {I2C_0, I2C_BAUDRATE, NON_BLOCKING};
 
 	if(!I2C_INIT(i2c_conf))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
 
@@ -61,10 +65,11 @@ bool FXOS_INIT(void)
 	uint8_t who_am_i_value;
 	if(!I2C_write_read(I2C_0, FXOS_SLAVE_ADDRESS, &who_am_i_address, 1, &who_am_i_value, 1))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
 
-	while(I2C_rx_busy(I2C_0) || I2C_tx_busy(I2C_0));
+	while(I2C_busy(I2C_0));
 
 	if(who_am_i_value != FXOS8700CQ_WHO_AM_I_VALUE)
 	{
@@ -75,56 +80,92 @@ bool FXOS_INIT(void)
 
 	if(!I2C_write(I2C_0, FXOS_SLAVE_ADDRESS, active, 2))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
-	while(I2C_tx_busy(I2C_0));
+	while(I2C_busy(I2C_0));
 
 	uint8_t fxos_config[3] = {FXOS8700CQ_CTRL_REG4, 0x01, 0x01};
 	if(!I2C_write(I2C_0, FXOS_SLAVE_ADDRESS, fxos_config, 3))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
 
-	while(I2C_tx_busy(I2C_0));
+	while(I2C_busy(I2C_0));
 
 	fxos_config[0] = FXOS8700CQ_M_CTRL_REG1;
 	fxos_config[1] = 0x03;
 	fxos_config[2] = 0x20;
 	if(!I2C_write(I2C_0, FXOS_SLAVE_ADDRESS, fxos_config, 3))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
 
-	while(I2C_tx_busy(I2C_0));
+	while(I2C_busy(I2C_0));
 
 	gpioMode(PORTNUM2PIN(PC, 6), INPUT);
+
+	uint8_t int_source_address = 0x0C;
+	uint8_t int_source_value;
+	if(!I2C_write_read(I2C_0, FXOS_SLAVE_ADDRESS, &int_source_address, 1, &int_source_value, 1))
+	{
+		hw_DisableInterrupts();
+		return false;
+	}
+
+	while(I2C_busy(I2C_0));
+
+	if(int_source_value & 0x01)
+	{
+		if(!I2C_write_read(I2C_0, FXOS_SLAVE_ADDRESS, &raw_data_address, 1, (uint8_t *)raw_data_buffer, 12))
+		{
+			hw_DisableInterrupts();
+			return false;
+		}
+
+		while(I2C_busy(I2C_0));
+	}
+
 	if(!gpioIRQ (PORTNUM2PIN(PC, 6), GPIO_IRQ_MODE_FALLING_EDGE, dataReady_IRQ))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
 
 	active[1] = 0x01;
 	if(!I2C_write(I2C_0, FXOS_SLAVE_ADDRESS, active, 2))
 	{
+		hw_DisableInterrupts();
 		return false;
 	}
-	while(I2C_tx_busy(I2C_0));
+	while(I2C_busy(I2C_0));
 
+	hw_DisableInterrupts();
 	return true;
 }
 
 void FXOS_service(void)
 {
-	if(read_pending && !I2C_tx_busy(I2C_0) && !I2C_rx_busy(I2C_0))
+	if(read_pending && !I2C_busy(I2C_0))
 	{
 		read_pending = false;
+		int16_t sensor_ax, sensor_ay, sensor_az;
+		int16_t sensor_mx, sensor_my, sensor_mz;
+		sensor_ax = (int16_t)(((raw_data_buffer[0] << 8) | raw_data_buffer[1])) >> 2;
+		sensor_ay = (int16_t)(((raw_data_buffer[2] << 8) | raw_data_buffer[3])) >> 2;
+		sensor_az = (int16_t)(((raw_data_buffer[4] << 8) | raw_data_buffer[5])) >> 2;
+		sensor_mx = (int16_t)(((raw_data_buffer[6] << 8) | raw_data_buffer[7]));
+		sensor_my = (int16_t)(((raw_data_buffer[8] << 8) | raw_data_buffer[9]));
+		sensor_mz = (int16_t)(((raw_data_buffer[10] << 8) | raw_data_buffer[11]));
 
-		current_sample.ax = (int16_t)(((raw_data_buffer[0] << 8) | raw_data_buffer[1])) >> 2;
-		current_sample.ay = (int16_t)(((raw_data_buffer[2] << 8) | raw_data_buffer[3])) >> 2;
-		current_sample.az = (int16_t)(((raw_data_buffer[4] << 8) | raw_data_buffer[5])) >> 2;
-		current_sample.mx = (int16_t)(((raw_data_buffer[6] << 8) | raw_data_buffer[7]));
-		current_sample.my = (int16_t)(((raw_data_buffer[8] << 8) | raw_data_buffer[9]));
-		current_sample.mz = (int16_t)(((raw_data_buffer[10] << 8) | raw_data_buffer[11]));
+		current_sample.ax = sensor_ay;
+		current_sample.ay = -sensor_ax;
+		current_sample.az = sensor_az;
+		current_sample.mx = sensor_my;
+		current_sample.my = -sensor_mx;
+		current_sample.mz = sensor_mz;
 	}
 }
 
@@ -184,7 +225,7 @@ void get_orientation(int16_t * roll, int16_t * pitch, int16_t * heading)
 	*heading =  (int16_t) (heading_rad * 180 / M_PI);
 }
 
-static uint8_t raw_data_address = FXOS8700CQ_OUT_X_MSB;
+
 static void dataReady_IRQ(void)
 {
 	if(I2C_write_read(I2C_0, FXOS_SLAVE_ADDRESS, &raw_data_address, 1, (uint8_t *)raw_data_buffer, 12))

@@ -81,8 +81,8 @@ bool gpioIRQ(pin_t pin, uint8_t irqMode, pinIrqFun_t irqFun)
     if(irqFun == (pinIrqFun_t)0)
         return 0;
 
-    if(irqMode > 3)
-        return 0;
+    //if(irqMode > 3)
+        //return 0;
 
     PORT_Type * port = ports[PIN2PORT(pin)];
 

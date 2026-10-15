@@ -49,8 +49,8 @@ enum{
 };
 
 enum{
-	BLOCKING,
-	NON_BLOCKING
+	BLOCKING_UART,
+	NON_BLOCKING_UART
 };
 
 typedef struct{

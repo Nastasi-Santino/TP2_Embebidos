@@ -10,7 +10,7 @@
 
 static UART_Type * const uarts[] = UART_BASE_PTRS;
 
-static uint8_t uarts_RX_TX_IRQn[] = UART_RX_TX_IRQS;
+static IRQn_Type uarts_RX_TX_IRQn[] = UART_RX_TX_IRQS;
 
 static bool UART_yainit[6];
 
@@ -75,16 +75,16 @@ bool UART_init(UART_config_t config)
 		}
 	}
 
-	if(config.receive_blocking == NON_BLOCKING || config.transmit_blocking == NON_BLOCKING)
+	if(config.receive_blocking == NON_BLOCKING_UART || config.transmit_blocking == NON_BLOCKING_UART)
 	{
 		NVIC_EnableIRQ(uarts_RX_TX_IRQn[config.UART_num]);
-		if(config.receive_blocking == NON_BLOCKING)
+		if(config.receive_blocking == NON_BLOCKING_UART)
 		{
 			receivingInterrupt[config.UART_num] = true;
 			uart->C2 |= UART_C2_RIE_MASK;
 		}
 
-		if(config.transmit_blocking == NON_BLOCKING)
+		if(config.transmit_blocking == NON_BLOCKING_UART)
 		{
 			transmitingInterrupt[config.UART_num] = true;
 		}

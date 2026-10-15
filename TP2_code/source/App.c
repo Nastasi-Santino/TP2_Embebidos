@@ -11,8 +11,8 @@
 #include "board.h"
 #include "gpio.h"
 #include "pisr.h"
-//#include "uart.h"
-#include "i2c.h"
+#include "uart.h"
+#include "fxos.h"
 
 /*******************************************************************************
  * CONSTANT AND MACRO DEFINITIONS USING #DEFINE
@@ -42,6 +42,8 @@
 void blinkCallback (void);
 void switchCallback (void);
 
+uint8_t numToString(int16_t num, uint8_t *string);
+
 /*******************************************************************************
  *******************************************************************************
                         GLOBAL FUNCTION DEFINITIONS
@@ -52,25 +54,27 @@ void switchCallback (void);
 /* Función que se llama 1 vez, al comienzo del programa */
 void App_Init (void)
 {
-	/*
 	UART_config_t c ;
-	c.UART_num = 0;
+
+	FXOS_INIT();
+
+	c.UART_num = UART_0;
 	c.baudrate = 115200;
 	c.data_length = EIGHT_BIT_DATA;
 	c.first_bit = LSB_FIRST;
 	c.mode = RECEIVE_AND_TRANSMIT;
 	c.parity = NO_PARITY;
 	c.stop_length = ONE_BIT_STOP;
-	c.transmit_blocking = NON_BLOCKING;
-	c.receive_blocking = NON_BLOCKING;
+	c.transmit_blocking = NON_BLOCKING_UART;
+	c.receive_blocking = NON_BLOCKING_UART;
 	c.use_hw_fifo = true;
 	UART_init(c);
 
 
 	uint8_t hola[4] = {'h', 'o', 'l','a'};
 	UART_write(UART_0, hola, 4);
-	*/
 
+	/*
 	I2C_config_t c;
 	c.i2c_num = I2C_0;
 	c.baudrate = 100e3;
@@ -80,6 +84,7 @@ void App_Init (void)
 
 	gpioMode(PIN_RGB, OUTPUT);
 	gpioWrite(PIN_RGB, HIGH);
+	*/
 
 }
 
@@ -93,9 +98,9 @@ void App_Run (void)
 		UART_read(UART_0, &received, 1);
 		UART_write(UART_0, &received, 1);
 	}
-	 */
 
-	/*
+
+
 	uint8_t data;
 	uint8_t reg_address = 0x0D;
 	I2C_write_read(I2C_0, 0x1D, &reg_address, 1, &data, 1);
@@ -104,8 +109,9 @@ void App_Run (void)
 		gpioToggle(PIN_RGB);
 	}
 	*/
-	uint8_t data;
-	uint8_t reg_address = 0x0D;
+	/*
+	static uint8_t data;
+	static uint8_t reg_address = 0x0D;
 	static bool read = true;
 
 	if((!I2C_tx_busy(I2C_0) && !I2C_rx_busy(I2C_0)) && read)
@@ -119,6 +125,60 @@ void App_Run (void)
 		gpioToggle(PIN_RGB);
 		read = true;
 	}
+
+	*/
+	FXOS_service();
+
+	static uint32_t counter = 0;
+	if(counter >= 500000)
+	{
+		uint8_t newline = '\n';
+		int16_t roll, pitch, heading;
+		get_orientation(&roll, &pitch, &heading);
+
+		uint8_t roll_txt = 'R';
+		uint8_t roll_s[5];
+		uint8_t pitch_txt = 'P';
+		uint8_t pitch_s[5];
+		uint8_t heading_txt = 'H';
+		uint8_t heading_s[5];
+
+		uint8_t roll_length = numToString(roll, roll_s);
+		uint8_t pitch_length = numToString(pitch, pitch_s);
+		uint8_t heading_length= numToString(heading, heading_s);
+
+		UART_write(UART_0, &roll_txt, 1);
+		UART_write(UART_0, roll_s, roll_length);
+		UART_write(UART_0, &newline, 1);
+
+		UART_write(UART_0, &pitch_txt, 1);
+		UART_write(UART_0, pitch_s, pitch_length);
+		UART_write(UART_0, &newline, 1);
+
+		UART_write(UART_0, &heading_txt, 1);
+		UART_write(UART_0, heading_s, heading_length);
+		UART_write(UART_0, &newline, 1);
+		UART_write(UART_0, &newline, 1);
+
+		counter = 0;
+	} else
+	{
+		counter++;
+	}
+
+
+	if(UART_words_received(UART_0) >= 1)
+	{
+		uint8_t received;
+		UART_read(UART_0, &received, 1);
+		if(received == '1')
+		{
+
+		}
+	}
+
+
+
 }
 
 
@@ -129,6 +189,32 @@ void App_Run (void)
  ******************************************************************************/
 
 static bool flag, blink;
+
+uint8_t numToString(int16_t num, uint8_t *string)
+{
+    uint16_t value = (num < 0) ? -(int32_t)num : num;
+    uint16_t aux = value;
+    uint8_t digits = 1;
+
+    // Contar los dígitos
+    while (aux >= 10) {
+        aux /= 10;
+        digits++;
+    }
+
+    // Agregar signo y terminador
+    string[0] = (num < 0) ? '-' : '+';
+    string[digits + 1] = '\0';
+
+    // Convertir los dígitos de derecha a izquierda
+    for (uint8_t i = digits; i > 0; i--) {
+        string[i] = '0' + (value % 10);
+        value /= 10;
+    }
+
+    return digits + 1;
+}
+
 
 void blinkCallback (void)
 {

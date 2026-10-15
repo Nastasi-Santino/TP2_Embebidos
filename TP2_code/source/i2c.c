@@ -5,7 +5,7 @@
 
 static I2C_Type * const i2cs[] = I2C_BASE_PTRS;
 
-static uint8_t i2c_IRQn[] = I2C_IRQS;
+static IRQn_Type i2c_IRQn[] = I2C_IRQS;
 
 static bool active_interrupt[3];
 static volatile bool rx_busy[3];
@@ -167,16 +167,17 @@ bool I2C_read(uint8_t i2c_num, uint8_t slave_address , uint8_t * data_byte, uint
 		return false;
 	}
 
-	i2c->C1 |= I2C_C1_TX_MASK;
-	i2c->C1 |= I2C_C1_MST_MASK;
-
-	i2c->D = (slave_address << 1) | 0x01;
-
 	if(!active_interrupt[i2c_num])
 	{
+
+		i2c->C1 |= I2C_C1_TX_MASK;
+		i2c->C1 |= I2C_C1_MST_MASK;
+
+		i2c->D = (slave_address << 1) | 0x01;
+
 		while(!(i2c->S & I2C_S_IICIF_MASK));
 
-		i2c->S |= I2C_S_IICIF_MASK;
+		i2c->S = I2C_S_IICIF_MASK;
 
 		if(!check_ack(i2c_num))
 		{
@@ -197,7 +198,7 @@ bool I2C_read(uint8_t i2c_num, uint8_t slave_address , uint8_t * data_byte, uint
 		for(int i = 0; i < length; i++)
 		{
 			while(!(i2c->S & I2C_S_IICIF_MASK));
-			i2c->S |= I2C_S_IICIF_MASK;
+			i2c->S = I2C_S_IICIF_MASK;
 
 			if(i == length - 2)
 			{
@@ -217,6 +218,11 @@ bool I2C_read(uint8_t i2c_num, uint8_t slave_address , uint8_t * data_byte, uint
 		read_pointers[i2c_num] = data_byte;
 		read_lengths[i2c_num] = length;
 		rx_busy[i2c_num] = true;
+
+		i2c->C1 |= I2C_C1_TX_MASK;
+		i2c->C1 |= I2C_C1_MST_MASK;
+
+		i2c->D = (slave_address << 1) | 0x01;
 		i2c->C1 |= I2C_C1_IICIE_MASK;
 	}
 
@@ -234,15 +240,16 @@ bool I2C_write(uint8_t i2c_num, uint8_t slave_address, uint8_t * data_byte, uint
 
 	write_counter[i2c_num] = 0;
 
-	i2c->C1 |= I2C_C1_TX_MASK;
-	i2c->C1 |= I2C_C1_MST_MASK;
-
-	i2c->D = (slave_address << 1) & 0xFE;
 
 	if(!active_interrupt[i2c_num])
 	{
+		i2c->C1 |= I2C_C1_TX_MASK;
+		i2c->C1 |= I2C_C1_MST_MASK;
+
+		i2c->D = (slave_address << 1) & 0xFE;
+
 		while(!(i2c->S & I2C_S_IICIF_MASK));
-		i2c->S |= I2C_S_IICIF_MASK;
+		i2c->S = I2C_S_IICIF_MASK;
 
 		if(!check_ack(i2c_num))
 		{
@@ -254,7 +261,7 @@ bool I2C_write(uint8_t i2c_num, uint8_t slave_address, uint8_t * data_byte, uint
 			i2c->D = data_byte[i];
 
 			while(!(i2c->S & I2C_S_IICIF_MASK));
-			i2c->S |= I2C_S_IICIF_MASK;
+			i2c->S = I2C_S_IICIF_MASK;
 
 			if(!check_ack(i2c_num))
 			{
@@ -277,6 +284,11 @@ bool I2C_write(uint8_t i2c_num, uint8_t slave_address, uint8_t * data_byte, uint
 		write_pointers[i2c_num] = data_byte;
 		write_lengths[i2c_num] = length;
 		tx_busy[i2c_num] = true;
+
+		i2c->C1 |= I2C_C1_TX_MASK;
+		i2c->C1 |= I2C_C1_MST_MASK;
+
+		i2c->D = (slave_address << 1) & 0xFE;
 		i2c->C1 |= I2C_C1_IICIE_MASK;
 	}
 
@@ -312,31 +324,28 @@ bool I2C_write_read(uint8_t i2c_num, uint8_t slave_address,
 		}
 	} else
 	{
-		i2c->C1 |= I2C_C1_TX_MASK;
-		i2c->C1 |= I2C_C1_MST_MASK;
-
-		i2c->D = (slave_address << 1) & 0xFE;
-
 		write_pointers[i2c_num] = write_data;
 		write_lengths[i2c_num] = write_length;
 		read_pointers[i2c_num] = read_data;
 		read_lengths[i2c_num] = read_length;
 		tx_busy[i2c_num] = true;
 		slave_addresses[i2c_num] = slave_address;
+
+		i2c->S = I2C_S_IICIF_MASK;
 		i2c->C1 |= I2C_C1_IICIE_MASK;
+		i2c->C1 |= I2C_C1_TX_MASK;
+		i2c->C1 |= I2C_C1_MST_MASK;
+
+		i2c->D = (slave_address << 1) & 0xFE;
+
 	}
 
 	return true;
 }
 
-bool I2C_tx_busy(uint8_t i2c_num)
+bool I2C_busy(uint8_t i2c_num)
 {
-	return tx_busy[i2c_num];
-}
-
-bool I2C_rx_busy(uint8_t i2c_num)
-{
-	return rx_busy[i2c_num];
+	return rx_busy[i2c_num] || tx_busy[i2c_num] || (i2cs[i2c_num]->S & I2C_S_BUSY_MASK);
 }
 
 uint8_t I2C_words_received(uint8_t i2c_num)
@@ -348,7 +357,7 @@ static void I2C_handler(uint8_t i2c_num)
 {
 	I2C_Type * i2c = i2cs[i2c_num];
 
-	i2c->S |= I2C_S_IICIF_MASK;
+	i2c->S = I2C_S_IICIF_MASK;
 
 	if(rx_busy[i2c_num])
 	{

@@ -31,8 +31,7 @@ bool I2C_write(uint8_t i2c_num, uint8_t slave_address, uint8_t * data_byte, uint
 bool I2C_write_read(uint8_t i2c_num, uint8_t slave_address,
 		uint8_t * write_data, uint8_t write_length, uint8_t * read_data, uint8_t read_length);
 
-bool I2C_tx_busy(uint8_t i2c_num);
-bool I2C_rx_busy(uint8_t i2c_num);
+bool I2C_busy(uint8_t i2c_num);
 uint8_t I2C_words_received(uint8_t i2c_num);
 
 
