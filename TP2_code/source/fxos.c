@@ -38,6 +38,11 @@
 
 #define FXOS8700CQ_WHO_AM_I_VALUE 0xC7
 
+
+//CALIBRACION
+#define MAG_OFFSET_X   (-321.0f)
+#define MAG_OFFSET_Y   (-88.0f)
+
 typedef struct {
     int16_t ax, ay, az;
     int16_t mx, my, mz;
@@ -95,7 +100,7 @@ bool FXOS_INIT(void)
 	while(I2C_busy(I2C_0));
 
 	fxos_config[0] = FXOS8700CQ_M_CTRL_REG1;
-	fxos_config[1] = 0x03;
+	fxos_config[1] = 0x1F;
 	fxos_config[2] = 0x20;
 	if(!I2C_write(I2C_0, FXOS_SLAVE_ADDRESS, fxos_config, 3))
 	{
@@ -185,18 +190,22 @@ int16_t get_pitch(void)
 
 int16_t get_heading(void)
 {
+	float_t mx = (float_t)current_sample.mx - MAG_OFFSET_X;
+	float_t my = (float_t)current_sample.my - MAG_OFFSET_Y;
+	float_t mz = (float_t)current_sample.mz;
+
 	float_t phi = atan2f((float_t)current_sample.ay,(float_t)current_sample.az);
 
 	float_t sqrt = sqrtf((powf((float_t)current_sample.ay, (float_t)2.0)) +
 			(powf((float_t)current_sample.az, (float_t)2.0)));
 	float_t theta = atan2f(-(float_t)current_sample.ax, sqrt);
 
-	float_t mx_heading = (float_t)current_sample.mx * cosf(theta) +
-			(float_t)current_sample.mz * sinf(theta);
+	float_t mx_heading = mx * cosf(theta) +
+	                     mz * sinf(theta);
 
-	float_t my_heading = (float_t)current_sample.mx * sinf(phi) * sinf(theta) +
-			(float_t)current_sample.my * cosf(phi) -
-			(float_t)current_sample.mz * sinf(phi) * cosf(theta);
+	float_t my_heading = mx * sinf(phi) * sinf(theta) +
+	                     my * cosf(phi) -
+	                     mz * sinf(phi) * cosf(theta);
 
 	float_t heading = atan2f(my_heading, mx_heading);
 
@@ -205,24 +214,35 @@ int16_t get_heading(void)
 
 void get_orientation(int16_t * roll, int16_t * pitch, int16_t * heading)
 {
+	float_t mx = (float_t)current_sample.mx - MAG_OFFSET_X;
+	float_t my = (float_t)current_sample.my - MAG_OFFSET_Y;
+	float_t mz = (float_t)current_sample.mz;
+
 	float_t phi = atan2f((float_t)current_sample.ay,(float_t)current_sample.az);
 
 	float_t sqrt = sqrtf((powf((float_t)current_sample.ay, (float_t)2.0)) +
 			(powf((float_t)current_sample.az, (float_t)2.0)));
 	float_t theta = atan2f(-(float_t)current_sample.ax, sqrt);
 
-	float_t mx_heading = (float_t)current_sample.mx * cosf(theta) +
-			(float_t)current_sample.mz * sinf(theta);
+	float_t mx_heading = mx * cosf(theta) +
+	                     mz * sinf(theta);
 
-	float_t my_heading = (float_t)current_sample.mx * sinf(phi) * sinf(theta) +
-			(float_t)current_sample.my * cosf(phi) -
-			(float_t)current_sample.mz * sinf(phi) * cosf(theta);
+	float_t my_heading = mx * sinf(phi) * sinf(theta) +
+	                     my * cosf(phi) -
+	                     mz * sinf(phi) * cosf(theta);
 
 	float_t heading_rad = atan2f(my_heading, mx_heading);
 
 	*roll = (int16_t) (phi * 180 / M_PI);
 	*pitch = (int16_t) (theta * 180 / M_PI);
 	*heading =  (int16_t) (heading_rad * 180 / M_PI);
+}
+
+void FXOS_get_mag(int16_t *mx, int16_t *my, int16_t *mz)
+{
+    *mx = current_sample.mx;
+    *my = current_sample.my;
+    *mz = current_sample.mz;
 }
 
 

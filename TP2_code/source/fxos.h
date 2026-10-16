@@ -14,4 +14,6 @@ int16_t get_heading(void);
 
 void get_orientation(int16_t * roll, int16_t * pitch, int16_t * heading);
 
+void FXOS_get_mag(int16_t *mx, int16_t *my, int16_t *mz);
+
 #endif /* FXOS_H_ */
