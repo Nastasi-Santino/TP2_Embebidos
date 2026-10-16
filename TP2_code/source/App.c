@@ -71,19 +71,6 @@ void App_Init (void)
 	gpioMode(PIN_RGB, OUTPUT);
 	gpioWrite(PIN_RGB, LOW); // LED apagado (activo bajo en FRDM-K64F)
 
-
-	SPI_config_t spi_config;
-	spi_config.spi_num = SPI_0;
-	spi_config.baudrate = 100000U;
-	spi_config.num_of_slaves = 1;
-	spi_config.active_low = true;
-	spi_config.frame_size = 8;
-	spi_config.blocking = NON_BLOCKING_SPI;
-	spi_config.first_bit = MSB_FIRST_SPI;
-	spi_config.sck_active = SCK_ACTIVE_LOW;
-	spi_config.sck_edge_sampling = LEADING_EDGE_SAMPLING;
-
-	SPI_INIT(spi_config);
 	/*
 	UART_config_t c ;
 
